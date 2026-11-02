@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* In your globals.css or equivalent */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type='number'] {
+    -moz-appearance: textfield;
+}
+
+/* Customize react-confirm-alert overlay */
+.react-confirm-alert-overlay {
+    background: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Slide-in animation */
+@keyframes slideIn {
+    from {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Slide-out animation */
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+/* Modal body */
+.react-confirm-alert-body {
+    width: 90% !important;
+    color: black !important;
+    max-width: 400px !important;
+    background: white !important;
+    border-radius: 8px !important;
+    padding: 20px !important;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2) !important;
+    animation: slideIn 0.5s ease-out forwards !important;
+    margin: 20px auto !important;
+    /* Center the modal */
+    box-sizing: border-box;
+}
+
+.react-confirm-alert-button-group button {
+    background-color: #000 !important;
+    color: #fff !important;
+    padding: 10px 20px !important;
+    border: none !important;
+    border-radius: 5px !important;
+    margin: 10px 5px !important;
+    cursor: pointer !important;
+    transition: background-color 0.3s ease !important;
+    width: calc(50% - 10px);
+    /* Space for the margin */
+}
+
+.react-confirm-alert-button-group button:hover {
+    background-color: #333 !important;
+}
+
+@keyframes messenger-glow {
+
+    0%,
+    100% {
+        transform: translateY(0px);
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+    }
+
+    50% {
+        transform: translateY(-8px);
+        box-shadow: 0 8px 20px rgba(59, 130, 246, 0.8), 0 0 15px rgba(59, 130, 246, 0.6);
+    }
+}
+
+.animate-messenger-glow {
+    animation: messenger-glow 2s ease-in-out infinite;
+}
+
+@media (max-width: 600px) {
+    .react-confirm-alert-body {
+        width: 90% !important;
+        padding: 20px !important;
+        margin: 10px auto !important;
+    }
+
+    .react-confirm-alert-button-group {
+        display: flex;
+    }
+
+    .react-confirm-alert-button-group button {
+        padding: 10px !important;
+        width: 100%;
+    }
+}
