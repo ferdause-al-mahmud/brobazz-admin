@@ -1,6 +1,7 @@
 import { mediaResponse } from "@/lib/media";
 
-// GET /media/<id>.webp — uploaded images (see src/lib/media.ts). Public, like on the storefront.
+// GET /media/<id>.webp — legacy images stored in GridFS before uploads moved to disk (/uploads).
+// Kept so URLs saved on older products keep working.
 export async function GET(_request: Request, ctx: RouteContext<"/media/[file]">) {
   const { file } = await ctx.params;
   try {

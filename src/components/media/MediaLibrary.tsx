@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmButton } from "@/components/ui/client";
 import { EmptyState } from "@/components/ui/Page";
-import { removeMedia, uploadImages } from "@/lib/actions/media";
+import { removeMedia } from "@/lib/actions/media";
 import { formatBytes, formatDate } from "@/lib/format";
 import type { MediaFile } from "@/lib/media";
+import { uploadFiles } from "./uploadFiles";
 
 export function MediaLibrary({ files, canDelete }: { files: MediaFile[]; canDelete: boolean }) {
   const input = useRef<HTMLInputElement>(null);
@@ -19,13 +20,13 @@ export function MediaLibrary({ files, canDelete }: { files: MediaFile[]; canDele
   const [uploading, startUpload] = useTransition();
 
   const upload = (list: FileList) => {
-    const formData = new FormData();
-    Array.from(list).forEach((file) => formData.append("files", file));
+    const files = Array.from(list);
+    if (!files.length) return;
     startUpload(async () => {
-      const result = await uploadImages(formData);
-      if (!result.ok) toast.error(result.error);
-      else {
-        toast.success(`${result.data.length} uploaded`);
+      const { uploaded, errors } = await uploadFiles(files);
+      errors.forEach((error) => toast.error(error));
+      if (uploaded.length) {
+        toast.success(`${uploaded.length} uploaded`);
         router.refresh();
       }
     });

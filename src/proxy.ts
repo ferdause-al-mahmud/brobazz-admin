@@ -5,7 +5,7 @@ import { ADMIN_ONLY_PATHS } from "@/lib/navigation";
 
 // Fast, optimistic access control from the signed token (no database). Pages and server actions
 // re-check the user against the database, so a revoked role takes effect immediately there.
-const PUBLIC_PATHS = ["/login", "/api/auth", "/media"];
+const PUBLIC_PATHS = ["/login", "/api/auth", "/media", "/uploads"];
 
 const matches = (pathname: string, prefixes: string[]) =>
   prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

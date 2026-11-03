@@ -6,9 +6,10 @@ import { ArrowLeft, ArrowRight, Check, ImagePlus, Images, Link2, LoaderCircle, T
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/client";
-import { browseMedia, uploadImages } from "@/lib/actions/media";
+import { browseMedia } from "@/lib/actions/media";
 import type { MediaFile } from "@/lib/media";
 import { cn } from "@/lib/cn";
+import { uploadFiles } from "./uploadFiles";
 
 /** Uploads files and returns their URLs; shared by the gallery and single-image pickers. */
 function useUpload(onUploaded: (urls: string[]) => void) {
@@ -16,16 +17,12 @@ function useUpload(onUploaded: (urls: string[]) => void) {
   const upload = (files: FileList | File[]) => {
     const list = Array.from(files).filter((file) => file.type.startsWith("image/"));
     if (!list.length) return;
-    const formData = new FormData();
-    list.forEach((file) => formData.append("files", file));
     startUpload(async () => {
-      const result = await uploadImages(formData);
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-      onUploaded(result.data.map((file) => file.url));
-      toast.success(`${result.data.length} image${result.data.length > 1 ? "s" : ""} uploaded`);
+      const { uploaded, errors } = await uploadFiles(list);
+      errors.forEach((error) => toast.error(error));
+      if (!uploaded.length) return;
+      onUploaded(uploaded.map((file) => file.url));
+      toast.success(`${uploaded.length} image${uploaded.length > 1 ? "s" : ""} uploaded`);
     });
   };
   return { uploading, upload };

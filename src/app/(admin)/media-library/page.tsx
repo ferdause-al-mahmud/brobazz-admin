@@ -15,7 +15,7 @@ export default async function MediaLibraryPage({ searchParams }: PageProps<"/med
 
   return (
     <>
-      <PageHeader description="Uploads are resized and converted to WebP, and stored in the database so both the admin and the storefront can serve them." title="Media library" />
+      <PageHeader description="Uploads are resized, converted to WebP and saved on the server, where both the admin and the storefront serve them from." title="Media library" />
       <MediaLibrary canDelete={user.role === "admin"} files={files} />
       {total > PAGE_SIZE && (
         <div className="mt-4 overflow-hidden rounded-xl border border-line bg-surface">
