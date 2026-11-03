@@ -5,13 +5,21 @@ import { ProductForm } from "@/components/products/ProductForm";
 import { ButtonLink } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/Page";
 import { requireStaffPage } from "@/lib/auth/session";
-import { getAttributePresets, getCategoryOptions, getProductInput } from "@/lib/data/catalog";
+import {
+  getAttributePresets,
+  getCategoryOptions,
+  getProductInput,
+} from "@/lib/data/catalog";
 
-export async function generateMetadata({ params }: PageProps<"/products/[id]">): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PageProps<"/products/[id]">): Promise<Metadata> {
   return { title: `Edit ${decodeURIComponent((await params).id)}` };
 }
 
-export default async function EditProductPage({ params }: PageProps<"/products/[id]">) {
+export default async function EditProductPage({
+  params,
+}: PageProps<"/products/[id]">) {
   await requireStaffPage();
   const id = decodeURIComponent((await params).id);
   const [product, categories, presets] = await Promise.all([
@@ -20,7 +28,7 @@ export default async function EditProductPage({ params }: PageProps<"/products/[
     getAttributePresets(),
   ]);
   if (!product) notFound();
-
+  console.log(product);
   const storefront = process.env.STOREFRONT_URL;
 
   return (
@@ -28,7 +36,12 @@ export default async function EditProductPage({ params }: PageProps<"/products/[
       <PageHeader
         actions={
           storefront && product.isActive ? (
-            <ButtonLink href={`${storefront}/product/${product.slug}`} rel="noreferrer" target="_blank" variant="secondary">
+            <ButtonLink
+              href={`${storefront}/product/${product.slug}`}
+              rel="noreferrer"
+              target="_blank"
+              variant="secondary"
+            >
               <ExternalLink /> View in store
             </ButtonLink>
           ) : undefined
@@ -37,7 +50,13 @@ export default async function EditProductPage({ params }: PageProps<"/products/[
         description={`Code ${product.id}`}
         title={product.name}
       />
-      <ProductForm categories={categories} initial={product} key={product.id} originalId={product.id} presets={presets} />
+      <ProductForm
+        categories={categories}
+        initial={product}
+        key={product.id}
+        originalId={product.id}
+        presets={presets}
+      />
     </>
   );
 }
