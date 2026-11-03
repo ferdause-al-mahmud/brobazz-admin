@@ -1,112 +1,112 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-/* In your globals.css or equivalent */
-input[type='number']::-webkit-outer-spin-button,
-input[type='number']::-webkit-inner-spin-button {
+/* Brand colours match the storefront (customer/app/globals.css). */
+:root {
+  color-scheme: light;
+  --background: #f5f6fa;
+  --foreground: #202124;
+  --brand-primary: #2a467d;
+  --brand-secondary: #d4af37;
+  --brand-neutral: #ffffff;
+  --brand-accent: #202124;
+  --brand-ink: #152548;
+
+  /* Admin surfaces and text, derived from the brand ink. */
+  --surface: #ffffff;
+  --surface-muted: #f8f9fc;
+  --line: #e6e8ef;
+  --line-strong: #d5d9e3;
+  --muted: #6b7385;
+  --subtle: #9aa1b0;
+
+  /* Status colours: reserved for state, always paired with a label. */
+  --good: #2f7a45;
+  --good-soft: #e7f3ea;
+  --warn: #9b6426;
+  --warn-soft: #fbf1e1;
+  --bad: #b23b3b;
+  --bad-soft: #fbeaea;
+  --info: #2b5ea8;
+  --info-soft: #e8f0fb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-brand-neutral: var(--brand-neutral);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-ink: var(--brand-ink);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --font-sans: var(--font-manrope-sans);
+  --shadow-card: 0 1px 2px rgb(21 37 72 / 4%), 0 4px 16px rgb(21 37 72 / 4%);
+  --shadow-pop: 0 18px 44px rgb(21 37 72 / 18%);
+
+  --animate-fade-in: fade-in 0.18s ease-out;
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    min-width: 320px;
+  }
+
+  body {
+    min-height: 100vh;
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-manrope-sans), sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
-}
+  }
 
-input[type='number'] {
+  input[type="number"] {
     -moz-appearance: textfield;
-}
+  }
 
-/* Customize react-confirm-alert overlay */
-.react-confirm-alert-overlay {
-    background: rgba(0, 0, 0, 0.6) !important;
-}
-
-/* Slide-in animation */
-@keyframes slideIn {
-    from {
-        transform: translateX(-100%);
-        opacity: 0;
-    }
-
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-/* Slide-out animation */
-@keyframes slideOut {
-    from {
-        transform: translateX(0);
-        opacity: 1;
-    }
-
-    to {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-}
-
-/* Modal body */
-.react-confirm-alert-body {
-    width: 90% !important;
-    color: black !important;
-    max-width: 400px !important;
-    background: white !important;
-    border-radius: 8px !important;
-    padding: 20px !important;
-    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2) !important;
-    animation: slideIn 0.5s ease-out forwards !important;
-    margin: 20px auto !important;
-    /* Center the modal */
-    box-sizing: border-box;
-}
-
-.react-confirm-alert-button-group button {
-    background-color: #000 !important;
-    color: #fff !important;
-    padding: 10px 20px !important;
-    border: none !important;
-    border-radius: 5px !important;
-    margin: 10px 5px !important;
-    cursor: pointer !important;
-    transition: background-color 0.3s ease !important;
-    width: calc(50% - 10px);
-    /* Space for the margin */
-}
-
-.react-confirm-alert-button-group button:hover {
-    background-color: #333 !important;
-}
-
-@keyframes messenger-glow {
-
-    0%,
-    100% {
-        transform: translateY(0px);
-        box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
-    }
-
-    50% {
-        transform: translateY(-8px);
-        box-shadow: 0 8px 20px rgba(59, 130, 246, 0.8), 0 0 15px rgba(59, 130, 246, 0.6);
-    }
-}
-
-.animate-messenger-glow {
-    animation: messenger-glow 2s ease-in-out infinite;
-}
-
-@media (max-width: 600px) {
-    .react-confirm-alert-body {
-        width: 90% !important;
-        padding: 20px !important;
-        margin: 10px auto !important;
-    }
-
-    .react-confirm-alert-button-group {
-        display: flex;
-    }
-
-    .react-confirm-alert-button-group button {
-        padding: 10px !important;
-        width: 100%;
-    }
+  :focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
+  }
 }
