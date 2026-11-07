@@ -41,10 +41,21 @@ const heroSlideSchema = new Schema(
   { _id: false },
 );
 
+// A link in one of the footer's columns.
+const footerLinkSchema = new Schema(
+  {
+    label: { type: String, required: true, trim: true },
+    href: { type: String, required: true, trim: true },
+    isActive: { type: Boolean, default: true },
+  },
+  { _id: false },
+);
+
 const storeSettingsSchema = new Schema(
   {
     _id: { type: String, default: STORE_SETTINGS_ID },
     storeName: { type: String, default: "Brobazz" },
+    // The short description under the footer logo.
     tagline: { type: String, default: "" },
     supportPhone: { type: String, default: "" },
     supportEmail: { type: String, default: "" },
@@ -55,6 +66,28 @@ const storeSettingsSchema = new Schema(
       instagram: { type: String, default: "" },
       tiktok: { type: String, default: "" },
       youtube: { type: String, default: "" },
+    },
+    // Uploaded logo URLs; empty means the storefront's built-in logo.
+    branding: {
+      headerLogo: { type: String, default: "" },
+      footerLogo: { type: String, default: "" },
+    },
+    header: {
+      // Small text above the phone number in the navbar.
+      phoneLabel: { type: String },
+    },
+    // Footer texts and links. Anything never saved falls back to the storefront's defaults, so
+    // the link lists default to undefined (not []) to tell "never set" apart from "all removed".
+    footer: {
+      shopHeading: { type: String },
+      helpHeading: { type: String },
+      policiesHeading: { type: String },
+      helpLinks: { type: [footerLinkSchema], default: undefined },
+      policyLinks: { type: [footerLinkSchema], default: undefined },
+      // The pill under the policy links; empty hides it.
+      badgeText: { type: String },
+      // Empty means "© 2026 <store name>. All rights reserved."
+      copyright: { type: String },
     },
     announcements: { type: [announcementSchema], default: [] },
     // The highlighted button at the end of the category bar; hidden when the label is empty.

@@ -9,7 +9,6 @@ import { InputError, runAction } from "./result";
 
 export type GeneralSettings = {
   storeName: string;
-  tagline: string;
   supportPhone: string;
   supportEmail: string;
   whatsapp: string;
@@ -36,6 +35,25 @@ export type ContentSettings = {
     ctaHref: string;
     isActive: boolean;
   }[];
+};
+
+export type FooterLink = { label: string; href: string; isActive: boolean };
+
+export type NavbarSettings = {
+  headerLogo: string | null;
+  phoneLabel: string;
+};
+
+export type FooterSettings = {
+  footerLogo: string | null;
+  tagline: string;
+  shopHeading: string;
+  helpHeading: string;
+  policiesHeading: string;
+  helpLinks: FooterLink[];
+  policyLinks: FooterLink[];
+  badgeText: string;
+  copyright: string;
 };
 
 /** Links may point inside the store ("/collections/eid") or to another site (https://…). */
@@ -79,7 +97,6 @@ export async function saveGeneralSettings(input: GeneralSettings) {
     await save(
       {
         storeName: input.storeName.trim(),
-        tagline: input.tagline.trim(),
         supportPhone: input.supportPhone.trim(),
         supportEmail: input.supportEmail.trim(),
         // wa.me links need digits only, with the country code.
@@ -152,4 +169,60 @@ export async function saveContentSettings(input: ContentSettings) {
 
     await save({ announcements, heroSlides, navSpotlight }, user.id);
   }, "Store content saved");
+}
+
+/** Uploaded images are served from this site (/uploads/…) or the upload server (https://…). */
+function checkImage(value: string | null, field: string, errors: Record<string, string>) {
+  const url = value?.trim() ?? "";
+  if (url && !/^(\/|https?:\/\/)/.test(url)) errors[field] = "Choose an uploaded image";
+  return url;
+}
+
+function cleanLinks(links: FooterLink[], field: string, errors: Record<string, string>) {
+  return links
+    .map((link, index) => {
+      const label = link.label.trim();
+      const href = checkLink(link.href, `${field}.${index}.href`, errors);
+      if (label && !href) errors[`${field}.${index}.href`] = "Add a link";
+      if (href && !label) errors[`${field}.${index}.label`] = "Add a label";
+      return { label, href, isActive: link.isActive };
+    })
+    .filter((link) => link.label || link.href);
+}
+
+export async function saveNavbarSettings(input: NavbarSettings) {
+  return runAction(async () => {
+    const user = await requireStaff({ adminOnly: true });
+    const errors: Record<string, string> = {};
+    const headerLogo = checkImage(input.headerLogo, "headerLogo", errors);
+    if (Object.keys(errors).length) throw new InputError("Please fix the highlighted fields", errors);
+
+    await save({ "branding.headerLogo": headerLogo, "header.phoneLabel": input.phoneLabel.trim() }, user.id);
+  }, "Navbar saved");
+}
+
+export async function saveFooterSettings(input: FooterSettings) {
+  return runAction(async () => {
+    const user = await requireStaff({ adminOnly: true });
+    const errors: Record<string, string> = {};
+    const footerLogo = checkImage(input.footerLogo, "footerLogo", errors);
+    const helpLinks = cleanLinks(input.helpLinks, "helpLinks", errors);
+    const policyLinks = cleanLinks(input.policyLinks, "policyLinks", errors);
+    if (Object.keys(errors).length) throw new InputError("Please fix the highlighted fields", errors);
+
+    await save(
+      {
+        "branding.footerLogo": footerLogo,
+        tagline: input.tagline.trim(),
+        "footer.shopHeading": input.shopHeading.trim(),
+        "footer.helpHeading": input.helpHeading.trim(),
+        "footer.policiesHeading": input.policiesHeading.trim(),
+        "footer.helpLinks": helpLinks,
+        "footer.policyLinks": policyLinks,
+        "footer.badgeText": input.badgeText.trim(),
+        "footer.copyright": input.copyright.trim(),
+      },
+      user.id,
+    );
+  }, "Footer saved");
 }

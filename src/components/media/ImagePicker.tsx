@@ -271,11 +271,14 @@ export function SingleImagePicker({
   onChange,
   aspect = "aspect-square",
   label = "Add image",
+  fit = "cover",
 }: {
   value: string | null;
   onChange: (url: string | null) => void;
   aspect?: string;
   label?: string;
+  /** "contain" shows the whole image (logos) instead of cropping it to fill the box. */
+  fit?: "cover" | "contain";
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -285,7 +288,7 @@ export function SingleImagePicker({
     <div>
       {value ? (
         <div className={cn("group relative overflow-hidden rounded-lg border border-line bg-surface-muted", aspect)}>
-          <Image alt="" className="object-cover" fill sizes="320px" src={value} />
+          <Image alt="" className={fit === "contain" ? "object-contain p-3" : "object-cover"} fill sizes="320px" src={value} />
           <div className="absolute right-1.5 top-1.5 flex gap-1">
             <IconButton label="Replace image" onClick={() => input.current?.click()}>
               <ImagePlus />

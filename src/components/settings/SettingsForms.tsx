@@ -9,10 +9,15 @@ import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Field, Input, PrefixInput, Switch, Textarea } from "@/components/ui/Field";
 import {
   saveContentSettings,
+  saveFooterSettings,
   saveGeneralSettings,
+  saveNavbarSettings,
   saveShippingSettings,
   type ContentSettings,
+  type FooterLink,
+  type FooterSettings,
   type GeneralSettings,
+  type NavbarSettings,
   type ShippingSettings,
 } from "@/lib/actions/settings";
 
@@ -68,13 +73,10 @@ export function GeneralSettingsForm({ initial }: { initial: GeneralSettings }) {
 
   return (
     <Card>
-      <CardHeader description="Shown in the storefront header, footer, invoices and the WhatsApp order button." title="Store details" />
+      <CardHeader description="Shown in the storefront navbar, footer, invoices and the WhatsApp order button." title="Store details" />
       <CardBody className="grid gap-4 sm:grid-cols-2">
         <Field error={errors.storeName} htmlFor="store-name" label="Store name">
           <Input id="store-name" onChange={(event) => update({ storeName: event.target.value })} value={value.storeName} />
-        </Field>
-        <Field htmlFor="store-tagline" label="Tagline" optional>
-          <Input id="store-tagline" onChange={(event) => update({ tagline: event.target.value })} value={value.tagline} />
         </Field>
         <Field htmlFor="store-phone" label="Support phone">
           <Input id="store-phone" onChange={(event) => update({ supportPhone: event.target.value })} placeholder="+8801…" value={value.supportPhone} />
@@ -107,6 +109,165 @@ export function GeneralSettingsForm({ initial }: { initial: GeneralSettings }) {
       </CardBody>
       <SaveBar dirty={dirty} onSave={save} saving={saving} />
     </Card>
+  );
+}
+
+/** Logo upload with a note about the recommended file. */
+function LogoField({ error, hint, label, onChange, value }: { error?: string; hint: string; label: string; onChange: (url: string | null) => void; value: string | null }) {
+  return (
+    <Field error={error} hint={hint} label={label}>
+      <div className="max-w-72">
+        <SingleImagePicker aspect="aspect-[5/2]" fit="contain" label="Upload logo" onChange={onChange} value={value} />
+      </div>
+    </Field>
+  );
+}
+
+export function NavbarSettingsForm({ initial }: { initial: NavbarSettings }) {
+  const { value, update, errors, saving, save, dirty } = useSettingsForm(initial, saveNavbarSettings);
+
+  return (
+    <Card>
+      <CardHeader description="The bar at the top of every storefront page." title="Navbar" />
+      <CardBody className="grid gap-5 sm:grid-cols-2">
+        <LogoField
+          error={errors.headerLogo}
+          hint="Shown on a white background. A PNG with a transparent background works best. Remove it to use the built-in logo."
+          label="Navbar logo"
+          onChange={(headerLogo) => update({ headerLogo })}
+          value={value.headerLogo}
+        />
+        <Field hint="Shown above the support phone number on larger screens. Leave empty to show only the number." htmlFor="nav-phone-label" label="Phone label" optional>
+          <Input id="nav-phone-label" onChange={(event) => update({ phoneLabel: event.target.value })} placeholder="Order inquiry" value={value.phoneLabel} />
+        </Field>
+      </CardBody>
+      <SaveBar dirty={dirty} onSave={save} saving={saving} />
+    </Card>
+  );
+}
+
+function FooterLinksEditor({
+  errors,
+  field,
+  links,
+  onChange,
+}: {
+  errors: Record<string, string>;
+  field: "helpLinks" | "policyLinks";
+  links: FooterLink[];
+  onChange: (links: FooterLink[]) => void;
+}) {
+  const setLink = (index: number, patch: Partial<FooterLink>) => onChange(links.map((link, i) => (i === index ? { ...link, ...patch } : link)));
+
+  return (
+    <div className="grid gap-2">
+      {links.map((link, index) => (
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" key={index}>
+          <Input
+            aria-invalid={Boolean(errors[`${field}.${index}.label`])}
+            aria-label="Label"
+            onChange={(event) => setLink(index, { label: event.target.value })}
+            placeholder="Label, e.g. About us"
+            title={errors[`${field}.${index}.label`]}
+            value={link.label}
+          />
+          <Input
+            aria-invalid={Boolean(errors[`${field}.${index}.href`])}
+            aria-label="Link"
+            onChange={(event) => setLink(index, { href: event.target.value })}
+            placeholder="/about or https://…"
+            title={errors[`${field}.${index}.href`]}
+            value={link.href}
+          />
+          <div className="flex items-center gap-1">
+            <label className="mr-1 inline-flex items-center gap-1.5 text-xs font-semibold">
+              <input checked={link.isActive} className="size-4 accent-brand-primary" onChange={(event) => setLink(index, { isActive: event.target.checked })} type="checkbox" />
+              On
+            </label>
+            <Button aria-label="Move up" disabled={index === 0} onClick={() => onChange(move(links, index, -1))} size="icon" variant="ghost">
+              <ArrowUp />
+            </Button>
+            <Button aria-label="Move down" disabled={index === links.length - 1} onClick={() => onChange(move(links, index, 1))} size="icon" variant="ghost">
+              <ArrowDown />
+            </Button>
+            <Button aria-label="Remove" onClick={() => onChange(links.filter((_, i) => i !== index))} size="icon" variant="danger-ghost">
+              <Trash2 />
+            </Button>
+          </div>
+        </div>
+      ))}
+      {links.length === 0 && <p className="text-sm text-muted">No links: this column is hidden.</p>}
+      <div>
+        <Button onClick={() => onChange([...links, { label: "", href: "", isActive: true }])} size="sm" variant="secondary">
+          <Plus /> Add link
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function FooterSettingsForm({ initial, storeName }: { initial: FooterSettings; storeName: string }) {
+  const { value, update, errors, saving, save, dirty } = useSettingsForm(initial, saveFooterSettings);
+
+  return (
+    <div className="grid gap-6">
+      <Card>
+        <CardHeader description="The first footer column. The address, phone, email and social links come from Store details." title="Brand" />
+        <CardBody className="grid gap-5 sm:grid-cols-2">
+          <LogoField
+            error={errors.footerLogo}
+            hint="Shown on the dark brand-colour background, so use a light or white version. Remove it to use the built-in logo."
+            label="Footer logo"
+            onChange={(footerLogo) => update({ footerLogo })}
+            value={value.footerLogo}
+          />
+          <Field hint="A sentence or two about the store, shown under the logo." htmlFor="footer-tagline" label="Description">
+            <Textarea id="footer-tagline" onChange={(event) => update({ tagline: event.target.value })} value={value.tagline} />
+          </Field>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader description="The link columns. The first one lists the categories shown in the menu, plus “All products”." title="Columns" />
+        <CardBody className="grid gap-6">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field htmlFor="footer-shop-heading" label="Shop heading">
+              <Input id="footer-shop-heading" onChange={(event) => update({ shopHeading: event.target.value })} placeholder="Shop" value={value.shopHeading} />
+            </Field>
+            <Field htmlFor="footer-help-heading" label="Help heading">
+              <Input id="footer-help-heading" onChange={(event) => update({ helpHeading: event.target.value })} placeholder="Help" value={value.helpHeading} />
+            </Field>
+            <Field htmlFor="footer-policies-heading" label="Policies heading">
+              <Input id="footer-policies-heading" onChange={(event) => update({ policiesHeading: event.target.value })} placeholder="Policies" value={value.policiesHeading} />
+            </Field>
+          </div>
+          <div>
+            <h3 className="mb-2 text-xs font-semibold text-brand-ink">{value.helpHeading || "Help"} links</h3>
+            <FooterLinksEditor errors={errors} field="helpLinks" links={value.helpLinks} onChange={(helpLinks) => update({ helpLinks })} />
+          </div>
+          <div>
+            <h3 className="mb-2 text-xs font-semibold text-brand-ink">{value.policiesHeading || "Policies"} links</h3>
+            <FooterLinksEditor errors={errors} field="policyLinks" links={value.policyLinks} onChange={(policyLinks) => update({ policyLinks })} />
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader description="The smaller texts at the end of the footer. The designer credit is fixed." title="Bottom texts" />
+        <CardBody className="grid gap-4 sm:grid-cols-2">
+          <Field hint="The pill under the policy links. Leave empty to hide it." htmlFor="footer-badge" label="Highlight" optional>
+            <Input id="footer-badge" onChange={(event) => update({ badgeText: event.target.value })} placeholder="Cash on delivery all over Bangladesh" value={value.badgeText} />
+          </Field>
+          <Field hint="Leave empty to use the text shown in grey." htmlFor="footer-copyright" label="Copyright line" optional>
+            <Input id="footer-copyright" onChange={(event) => update({ copyright: event.target.value })} placeholder={`© 2026 ${storeName}. All rights reserved.`} value={value.copyright} />
+          </Field>
+        </CardBody>
+      </Card>
+
+      <div className="sticky bottom-0 -mx-4 border-t border-line bg-background/90 backdrop-blur sm:-mx-6 lg:-mx-8">
+        <SaveBar dirty={dirty} label="Save footer" onSave={save} saving={saving} />
+      </div>
+    </div>
   );
 }
 
