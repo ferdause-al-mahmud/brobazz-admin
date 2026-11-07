@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Mail, MapPin, Phone, Printer, StickyNote, UserRound } from "lucide-react";
+import { Mail, MapPin, Phone, Printer, Repeat, StickyNote, UserRound } from "lucide-react";
 import { CourierBooking } from "@/components/orders/CourierBooking";
 import { CustomerRecordButton } from "@/components/orders/CustomerRecord";
 import { DeleteOrderButton } from "@/components/orders/DeleteOrderButton";
-import { EditCustomerButton, NotePanel, PaymentPanel, StatusPanel } from "@/components/orders/OrderPanels";
+import { AdvancePanel, EditCustomerButton, NotePanel, PaymentPanel, StatusPanel } from "@/components/orders/OrderPanels";
 import { OrderStatusBadge, PaymentBadge, orderStatusMeta } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/Button";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
@@ -30,10 +30,17 @@ export default async function OrderPage({ params }: PageProps<"/orders/[orderID]
   const order = await Order.findOne({ orderID }).lean();
   if (!order) notFound();
 
-  const [previousOrders] = await Promise.all([
+  const [previousOrders, exchanges] = await Promise.all([
     Order.countDocuments({ "customer.phone": order.customer.phone, orderID: { $ne: orderID } }),
+    Order.find({ exchangeOf: orderID }, { orderID: 1, status: 1, items: 1, exchangeReturns: 1, createdAt: 1 }).sort({ createdAt: 1 }).lean(),
   ]);
   const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const advancePaid = order.advancePaid ?? 0;
+  const exchangeCredit = order.exchangeCredit ?? 0;
+  const dueOnDelivery = order.paymentStatus === "paid" ? 0 : Math.max(0, order.total - advancePaid);
+  const describe = (lines: { name: string; variantLabel?: string | null; quantity: number }[]) =>
+    lines.map((line) => `${line.name}${line.variantLabel ? ` (${line.variantLabel})` : ""} × ${line.quantity}`).join(", ");
+  const isExchange = Boolean(order.exchangeOf && order.exchangeReturns?.length);
   const history = [...(order.statusHistory ?? [])].reverse();
 
   return (
@@ -41,6 +48,11 @@ export default async function OrderPage({ params }: PageProps<"/orders/[orderID]
       <PageHeader
         actions={
           <>
+            {order.status === "delivered" && (
+              <ButtonLink href={`/orders/${orderID}/exchange`} variant="secondary">
+                <Repeat /> Create exchange
+              </ButtonLink>
+            )}
             {user.role === "admin" && (
               <DeleteOrderButton canRestock={!order.restockedAt && order.status !== "delivered"} orderID={orderID} />
             )}
@@ -51,7 +63,9 @@ export default async function OrderPage({ params }: PageProps<"/orders/[orderID]
         }
         back={{ href: "/orders", label: "Orders" }}
         description={
-          order.source === "admin"
+          isExchange
+            ? `Exchange for order #${order.exchangeOf} · created by ${order.createdBy ?? "staff"} ${formatDate(order.createdAt, true)}`
+            : order.source === "admin"
             ? `Entered by ${order.createdBy ?? "staff"} ${formatDate(order.createdAt, true)}${order.channel ? ` · via ${order.channel}` : ""}`
             : `Placed ${formatDate(order.createdAt, true)} · ${order.user ? "signed-in customer" : "guest checkout"}`
         }
@@ -64,6 +78,48 @@ export default async function OrderPage({ params }: PageProps<"/orders/[orderID]
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="grid min-w-0 gap-6">
+          {isExchange && (
+            <Card className="border-brand-secondary/60">
+              <CardHeader
+                description={
+                  order.exchangeReturnedAt
+                    ? order.exchangeReturnResellable
+                      ? `Collected ${formatDate(order.exchangeReturnedAt, true)} and put back into stock.`
+                      : `Collected ${formatDate(order.exchangeReturnedAt, true)}. Not resellable, so not added to stock.`
+                    : "The courier collects these when delivering. They go back into stock when this exchange is marked delivered."
+                }
+                title={`Exchange for order #${order.exchangeOf}`}
+              />
+              <CardBody className="grid gap-2 text-sm">
+                <p>
+                  <span className="font-semibold">Collect from customer:</span> {describe(order.exchangeReturns ?? [])}
+                </p>
+                <Link className="w-fit text-xs font-semibold text-brand-primary hover:underline" href={`/orders/${order.exchangeOf}`}>
+                  View order #{order.exchangeOf}
+                </Link>
+              </CardBody>
+            </Card>
+          )}
+          {exchanges.length > 0 && (
+            <Card>
+              <CardHeader description="Items from this order swapped later." title="Exchanges" />
+              <ul className="divide-y divide-line">
+                {exchanges.map((exchange) => (
+                  <li className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm" key={exchange.orderID}>
+                    <span className="min-w-0">
+                      <Link className="font-semibold text-brand-primary hover:underline" href={`/orders/${exchange.orderID}`}>
+                        #{exchange.orderID}
+                      </Link>{" "}
+                      <span className="text-muted">
+                        {describe(exchange.exchangeReturns ?? [])} → {describe(exchange.items)}
+                      </span>
+                    </span>
+                    <OrderStatusBadge status={exchange.status} />
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           <Card>
             <CardHeader description={`${units} unit${units === 1 ? "" : "s"}`} title="Items" />
             <ul className="divide-y divide-line">
@@ -104,13 +160,33 @@ export default async function OrderPage({ params }: PageProps<"/orders/[orderID]
                   <dd className="tabular-nums text-good">−{formatTaka(order.discount ?? 0)}</dd>
                 </div>
               )}
+              {exchangeCredit > 0 && (
+                <div className="flex justify-between text-muted">
+                  <dt>Credit for returned items</dt>
+                  <dd className="tabular-nums text-good">−{formatTaka(exchangeCredit)}</dd>
+                </div>
+              )}
               <div className="flex justify-between text-muted">
                 <dt>Delivery · {order.shippingLabel ?? order.shippingOption}</dt>
                 <dd className="tabular-nums text-brand-ink">{order.shippingCost ? formatTaka(order.shippingCost) : "Free"}</dd>
               </div>
               <div className="flex justify-between border-t border-line pt-2 text-base font-bold text-brand-ink">
-                <dt>Total · cash on delivery</dt>
+                <dt>Total</dt>
                 <dd className="tabular-nums">{formatTaka(order.total)}</dd>
+              </div>
+              {advancePaid > 0 && advancePaid < order.total && (
+                <div className="flex justify-between text-muted">
+                  <dt>Advance received</dt>
+                  <dd className="tabular-nums text-good">−{formatTaka(advancePaid)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between text-muted">
+                <dt>{order.status === "delivered" ? "Collected on delivery" : "Courier collects"}</dt>
+                <dd className="font-semibold tabular-nums text-brand-ink">
+                  {order.paymentStatus === "paid" && advancePaid >= order.total
+                    ? "Nothing (paid in advance)"
+                    : formatTaka(Math.max(0, order.total - advancePaid))}
+                </dd>
               </div>
             </dl>
           </Card>
@@ -142,7 +218,12 @@ export default async function OrderPage({ params }: PageProps<"/orders/[orderID]
         </div>
 
         <aside className="grid gap-6">
-          <StatusPanel orderID={orderID} restocked={Boolean(order.restockedAt)} status={order.status} />
+          <StatusPanel
+            exchangeReturns={isExchange && !order.exchangeReturnedAt ? describe(order.exchangeReturns ?? []) : null}
+            orderID={orderID}
+            restocked={Boolean(order.restockedAt)}
+            status={order.status}
+          />
 
           <Card>
             <CardHeader
@@ -190,13 +271,16 @@ export default async function OrderPage({ params }: PageProps<"/orders/[orderID]
               </p>
               <CustomerRecordButton phone={order.customer.phone} />
               <PaymentPanel orderID={orderID} paymentStatus={order.paymentStatus} />
+              {!["delivered", "cancelled", "returned"].includes(order.status) && order.paymentStatus !== "refunded" && (
+                <AdvancePanel advance={advancePaid} orderID={orderID} total={order.total} />
+              )}
             </CardBody>
           </Card>
 
           <CourierBooking
             address={order.customer.address}
             bookable={!["delivered", "cancelled", "returned"].includes(order.status)}
-            codAmount={order.paymentStatus === "paid" ? 0 : order.total}
+            codAmount={dueOnDelivery}
             configured={{ pathao: courierConfigured("pathao"), steadfast: courierConfigured("steadfast") }}
             courier={{
               name: order.courier?.name ?? "",
@@ -208,7 +292,9 @@ export default async function OrderPage({ params }: PageProps<"/orders/[orderID]
               status: order.courier?.status ?? "",
               statusCheckedAt: order.courier?.statusCheckedAt?.toISOString() ?? null,
             }}
-            customerNote={order.customer.notes ?? ""}
+            customerNote={[isExchange ? `Exchange: collect ${describe(order.exchangeReturns ?? [])}` : "", order.customer.notes ?? ""]
+              .filter(Boolean)
+              .join(". ")}
             orderID={orderID}
             outcome={order.courier?.status && !["delivered", "returned"].includes(order.status) ? courierOutcome(order.courier.status) : null}
           />

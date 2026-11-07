@@ -44,6 +44,16 @@ export type CourierBookingInput = {
 };
 
 /** Books the parcel with Pathao or Steadfast and saves the consignment on the order. */
+type ParcelLine = { name: string; variantLabel?: string | null; quantity: number };
+const describeLines = (lines: ParcelLine[]) =>
+  lines.map((line) => `${line.name}${line.variantLabel ? ` (${line.variantLabel})` : ""} × ${line.quantity}`).join(", ");
+
+/** What's in the parcel; an exchange also tells the rider what to collect. */
+function parcelDescription(order: { items: ParcelLine[]; exchangeOf?: number | null; exchangeReturns?: ParcelLine[] | null }) {
+  if (!order.exchangeOf || !order.exchangeReturns?.length) return describeLines(order.items);
+  return `EXCHANGE — deliver: ${describeLines(order.items)}; collect from customer: ${describeLines(order.exchangeReturns)}`;
+}
+
 export async function bookCourier(orderID: number, input: CourierBookingInput) {
   return runAction(async () => {
     const user = await requireStaff();
@@ -65,10 +75,7 @@ export async function bookCourier(orderID: number, input: CourierBookingInput) {
       address: order.customer.address,
       note: input.note.trim(),
       codAmount: input.codAmount,
-      itemDescription: order.items
-        .map((item) => `${item.name}${item.variantLabel ? ` (${item.variantLabel})` : ""} × ${item.quantity}`)
-        .join(", ")
-        .slice(0, 500),
+      itemDescription: parcelDescription(order).slice(0, 500),
       itemQuantity: order.items.reduce((sum, item) => sum + item.quantity, 0),
       weight: input.weight > 0 ? input.weight : 0.5,
     };

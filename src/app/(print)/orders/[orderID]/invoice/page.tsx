@@ -23,6 +23,8 @@ export default async function InvoicePage({ params }: PageProps<"/orders/[orderI
     StoreSettings.findById(STORE_SETTINGS_ID).lean(),
   ]);
   if (!order) notFound();
+  const advancePaid = order.advancePaid ?? 0;
+  const due = order.paymentStatus === "paid" ? 0 : Math.max(0, order.total - advancePaid);
 
   return (
     <main className="mx-auto max-w-3xl bg-white p-8 text-sm text-brand-ink print:p-0">
@@ -60,7 +62,8 @@ export default async function InvoicePage({ params }: PageProps<"/orders/[orderI
               {order.courier.name} {order.courier.trackingNumber}
             </p>
           )}
-          <p className="mt-2 font-semibold">{order.paymentStatus === "paid" ? "Paid" : "Cash on delivery"}</p>
+          <p className="mt-2 font-semibold">{order.paymentStatus === "paid" ? "Paid" : advancePaid > 0 ? "Advance paid · rest on delivery" : "Cash on delivery"}</p>
+          {order.exchangeOf && <p className="text-xs text-muted">Exchange for order #{order.exchangeOf}</p>}
         </div>
       </section>
 
@@ -99,16 +102,44 @@ export default async function InvoicePage({ params }: PageProps<"/orders/[orderI
             <dd className="tabular-nums">−{formatTaka(order.couponDiscount)}</dd>
           </div>
         )}
+        {(order.discount ?? 0) > 0 && (
+          <div className="flex justify-between">
+            <dt className="text-muted">Discount</dt>
+            <dd className="tabular-nums">−{formatTaka(order.discount ?? 0)}</dd>
+          </div>
+        )}
+        {(order.exchangeCredit ?? 0) > 0 && (
+          <div className="flex justify-between">
+            <dt className="text-muted">Exchange credit</dt>
+            <dd className="tabular-nums">−{formatTaka(order.exchangeCredit ?? 0)}</dd>
+          </div>
+        )}
         <div className="flex justify-between">
           <dt className="text-muted">Delivery</dt>
           <dd className="tabular-nums">{formatTaka(order.shippingCost)}</dd>
         </div>
-        <div className="flex justify-between border-t border-brand-ink pt-1.5 text-base font-bold">
-          <dt>{order.paymentStatus === "paid" ? "Total paid" : "Amount to collect"}</dt>
+        <div className="flex justify-between border-t border-brand-ink pt-1.5 font-bold">
+          <dt>Total</dt>
           <dd className="tabular-nums">{formatTaka(order.total)}</dd>
+        </div>
+        {advancePaid > 0 && order.paymentStatus !== "paid" && (
+          <div className="flex justify-between">
+            <dt className="text-muted">Advance paid</dt>
+            <dd className="tabular-nums">−{formatTaka(advancePaid)}</dd>
+          </div>
+        )}
+        <div className="flex justify-between text-base font-bold">
+          <dt>{order.paymentStatus === "paid" ? "Paid in full" : "Amount to collect"}</dt>
+          <dd className="tabular-nums">{formatTaka(order.paymentStatus === "paid" ? order.total : due)}</dd>
         </div>
       </dl>
 
+      {order.exchangeReturns?.length ? (
+        <p className="mt-8 rounded-lg border border-line p-3 text-xs">
+          <span className="font-semibold">Exchange — collect from customer: </span>
+          {order.exchangeReturns.map((line) => `${line.name}${line.variantLabel ? ` (${line.variantLabel})` : ""} × ${line.quantity}`).join(", ")}
+        </p>
+      ) : null}
       {order.customer.notes && (
         <p className="mt-8 rounded-lg border border-line p-3 text-xs">
           <span className="font-semibold">Customer note: </span>

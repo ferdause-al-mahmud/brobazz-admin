@@ -33,6 +33,24 @@ const orderItemSchema = new Schema(
   { _id: false },
 );
 
+// An item the customer sends back in an exchange (a copy of the line from the original order).
+const exchangeReturnSchema = new Schema(
+  {
+    // Position of the line in the original order's items.
+    itemIndex: { type: Number, required: true, min: 0 },
+    productId: { type: String, required: true },
+    variantId: { type: String },
+    sku: { type: String },
+    name: { type: String, required: true },
+    variantLabel: { type: String },
+    quantity: { type: Number, required: true, min: 1 },
+    // Unit price the customer paid for it, credited against the replacement.
+    price: { type: Number, required: true, min: 0 },
+    image: { type: String },
+  },
+  { _id: false },
+);
+
 const customerSchema = new Schema(
   {
     name: { type: String, required: true },
@@ -75,6 +93,9 @@ const orderSchema = new Schema(
     // Extra discount a staff member gave on a manual order.
     discount: { type: Number, default: 0, min: 0 },
     total: { type: Number, required: true },
+    // Paid before delivery (e.g. bKash for an outside-Dhaka order). The courier collects total − advancePaid.
+    // Revenue still counts the full total once the order is delivered.
+    advancePaid: { type: Number, default: 0, min: 0 },
     // "website" for storefront checkouts, "admin" for orders entered by staff.
     source: { type: String, enum: ["website", "admin"], default: "website", index: true },
     // Where a manual order came from, e.g. "Facebook", "Phone", "WhatsApp".
@@ -103,6 +124,14 @@ const orderSchema = new Schema(
     adminNote: { type: String },
     // Set once the items went back into stock (cancelled/returned), so it never happens twice.
     restockedAt: { type: Date },
+    // Exchange orders: the delivered order this one replaces items from, what comes back from it, and
+    // the value of those items credited against this order (so revenue only counts the difference).
+    exchangeOf: { type: Number, index: true },
+    exchangeReturns: { type: [exchangeReturnSchema], default: undefined },
+    exchangeCredit: { type: Number, default: 0, min: 0 },
+    // Set when the exchange is delivered and the old items are back with us; resellable ones go back into stock.
+    exchangeReturnedAt: { type: Date },
+    exchangeReturnResellable: { type: Boolean },
   },
   { timestamps: true },
 );

@@ -55,3 +55,34 @@ export async function restockItems(items: StockLine[], session: ClientSession) {
     }
   }
 }
+
+/**
+ * The old items from a delivered exchange are back with us. They no longer count as sold; resellable
+ * ones also go back on the shelf, damaged ones don't.
+ */
+export async function receiveExchangedItems(items: StockLine[], resellable: boolean, session: ClientSession) {
+  if (resellable) return restockItems(items, session);
+  for (const item of items) {
+    await Product.updateOne({ _id: item.productId }, { $inc: { soldCount: -item.quantity } }, { session });
+  }
+}
+
+type OrderLineForStock = StockLine & { quantity: number };
+
+/**
+ * What to put back when an order is cancelled or returned: its items, minus units that already came
+ * back to us through delivered exchanges (those were handled then).
+ */
+export function linesStillWithCustomer(
+  items: OrderLineForStock[],
+  exchanges: { exchangeReturnedAt?: Date | null; exchangeReturns?: { itemIndex: number; quantity: number }[] | null }[],
+) {
+  const back = new Map<number, number>();
+  for (const exchange of exchanges) {
+    if (!exchange.exchangeReturnedAt) continue;
+    for (const line of exchange.exchangeReturns ?? []) back.set(line.itemIndex, (back.get(line.itemIndex) ?? 0) + line.quantity);
+  }
+  return items
+    .map((item, index) => ({ ...item, quantity: item.quantity - (back.get(index) ?? 0) }))
+    .filter((item) => item.quantity > 0);
+}

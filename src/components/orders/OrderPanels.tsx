@@ -5,16 +5,18 @@ import { Pencil, Truck } from "lucide-react";
 import { orderStatusMeta } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
-import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { Checkbox, Field, Input, PrefixInput, Select, Textarea } from "@/components/ui/Field";
 import { Modal, useAction } from "@/components/ui/client";
 import {
   updateAdminNote,
+  updateAdvance,
   updateCourier,
   updateOrderCustomer,
   updateOrderStatus,
   updatePaymentStatus,
 } from "@/lib/actions/orders";
 import { cn } from "@/lib/cn";
+import { formatTaka } from "@/lib/format";
 import { PAYMENT_STATUSES, RESTOCKING_STATUSES, type OrderStatus, type PaymentStatus } from "@/lib/store-definitions";
 
 // The usual next step for each status, offered as the primary button.
@@ -32,14 +34,27 @@ const STEP_LABEL: Partial<Record<OrderStatus, string>> = {
   delivered: "Mark as delivered",
 };
 
-export function StatusPanel({ orderID, status, restocked }: { orderID: number; status: OrderStatus; restocked: boolean }) {
+export function StatusPanel({
+  orderID,
+  status,
+  restocked,
+  exchangeReturns,
+}: {
+  orderID: number;
+  status: OrderStatus;
+  restocked: boolean;
+  /** For an exchange whose old items haven't come back yet: what the courier collects. */
+  exchangeReturns: string | null;
+}) {
   const [target, setTarget] = useState<OrderStatus | null>(null);
   const [note, setNote] = useState("");
+  const [resellable, setResellable] = useState(true);
   const { pending, run } = useAction();
   const next = NEXT_STEP[status];
 
   const open = (value: OrderStatus) => {
     setNote("");
+    setResellable(true);
     setTarget(value);
   };
 
@@ -103,7 +118,7 @@ export function StatusPanel({ orderID, status, restocked }: { orderID: number; s
             </Button>
             <Button
               loading={pending}
-              onClick={() => target && run(() => updateOrderStatus(orderID, target, note), { onSuccess: () => setTarget(null) })}
+              onClick={() => target && run(() => updateOrderStatus(orderID, target, note, { resellable }), { onSuccess: () => setTarget(null) })}
               variant={target && RESTOCKING_STATUSES.includes(target) ? "danger" : "primary"}
             >
               Mark {target ? orderStatusMeta[target].label.toLowerCase() : ""}
@@ -115,9 +130,23 @@ export function StatusPanel({ orderID, status, restocked }: { orderID: number; s
         size="sm"
         title={target ? `Mark order #${orderID} ${orderStatusMeta[target].label.toLowerCase()}?` : ""}
       >
-        <Field hint="Saved in the order's history." htmlFor="status-note" label="Note" optional>
-          <Textarea className="min-h-20" id="status-note" onChange={(event) => setNote(event.target.value)} placeholder="e.g. Customer confirmed by phone" value={note} />
-        </Field>
+        <div className="grid gap-4">
+          {target === "delivered" && exchangeReturns && (
+            <div className="grid gap-2 rounded-lg border border-line p-3 text-sm">
+              <p>
+                <span className="font-semibold">Collected from the customer:</span> {exchangeReturns}
+              </p>
+              <Checkbox
+                checked={resellable}
+                label="Resellable — put back into stock (untick if damaged or defective)"
+                onChange={(event) => setResellable(event.target.checked)}
+              />
+            </div>
+          )}
+          <Field hint="Saved in the order's history." htmlFor="status-note" label="Note" optional>
+            <Textarea className="min-h-20" id="status-note" onChange={(event) => setNote(event.target.value)} placeholder="e.g. Customer confirmed by phone" value={note} />
+          </Field>
+        </div>
       </Modal>
     </Card>
   );
@@ -139,6 +168,26 @@ export function PaymentPanel({ orderID, paymentStatus }: { orderID: number; paym
           </option>
         ))}
       </Select>
+    </Field>
+  );
+}
+
+/** Money received before delivery (e.g. bKash for outside Dhaka); the courier collects the rest. */
+export function AdvancePanel({ orderID, advance, total }: { orderID: number; advance: number; total: number }) {
+  const [value, setValue] = useState(advance);
+  const { pending, run } = useAction();
+  return (
+    <Field hint={`Courier collects ${formatTaka(Math.max(0, total - value))}. Counted in revenue once delivered.`} htmlFor="advance" label="Advance received">
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <PrefixInput id="advance" max={total} min={0} onChange={(event) => setValue(Number(event.target.value))} prefix="৳" type="number" value={value} />
+        </div>
+        {value !== advance && (
+          <Button loading={pending} onClick={() => run(() => updateAdvance(orderID, value))} size="sm" variant="secondary">
+            Save
+          </Button>
+        )}
+      </div>
     </Field>
   );
 }

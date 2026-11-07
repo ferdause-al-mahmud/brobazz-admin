@@ -30,6 +30,36 @@ function deliveredBetween(from: Date, to?: Date) {
   ];
 }
 
+// An exchange isn't a new sale: it doesn't count as an order, and the items that came back are
+// subtracted from units and product revenue (its total is already only the price difference).
+const COUNTS_AS_ORDER = { $cond: [{ $ifNull: ["$exchangeOf", false] }, 0, 1] };
+
+/** Unwinds each order into its lines, with exchanged-back items as negative lines. */
+const NET_LINES = [
+  {
+    $project: {
+      line: {
+        $concatArrays: [
+          "$items",
+          {
+            $map: {
+              input: { $ifNull: ["$exchangeReturns", []] },
+              in: {
+                productId: "$$this.productId",
+                name: "$$this.name",
+                image: "$$this.image",
+                price: "$$this.price",
+                quantity: { $multiply: ["$$this.quantity", -1] },
+              },
+            },
+          },
+        ],
+      },
+    },
+  },
+  { $unwind: "$line" },
+];
+
 async function periodTotals(from: Date, to: Date) {
   const [totals] = await Order.aggregate<{ revenue: number; orders: number; units: number }>([
     ...deliveredBetween(from, to),
@@ -37,8 +67,8 @@ async function periodTotals(from: Date, to: Date) {
       $group: {
         _id: null,
         revenue: { $sum: "$total" },
-        orders: { $sum: 1 },
-        units: { $sum: { $sum: "$items.quantity" } },
+        orders: { $sum: COUNTS_AS_ORDER },
+        units: { $sum: { $subtract: [{ $sum: "$items.quantity" }, { $sum: "$exchangeReturns.quantity" }] } },
       },
     },
   ]);
@@ -104,7 +134,7 @@ export async function getDashboard(range: DashboardRange) {
       periodTotals(previousFrom, from),
       Order.aggregate<{ _id: string; revenue: number; orders: number }>([
         ...deliveredBetween(from),
-        { $group: { _id: bucketExpression, revenue: { $sum: "$total" }, orders: { $sum: 1 } } },
+        { $group: { _id: bucketExpression, revenue: { $sum: "$total" }, orders: { $sum: COUNTS_AS_ORDER } } },
       ]),
       Order.aggregate<{ _id: OrderStatus; count: number }>([
         { $match: { createdAt: { $gte: from } } },
@@ -112,27 +142,28 @@ export async function getDashboard(range: DashboardRange) {
       ]),
       Order.aggregate<{ _id: string; name: string; units: number; revenue: number; image: string | null }>([
         ...deliveredBetween(from),
-        { $unwind: "$items" },
+        ...NET_LINES,
         {
           $group: {
-            _id: "$items.productId",
-            name: { $first: "$items.name" },
-            image: { $first: "$items.image" },
-            units: { $sum: "$items.quantity" },
-            revenue: { $sum: { $multiply: ["$items.price", "$items.quantity"] } },
+            _id: "$line.productId",
+            name: { $first: "$line.name" },
+            image: { $first: "$line.image" },
+            units: { $sum: "$line.quantity" },
+            revenue: { $sum: { $multiply: ["$line.price", "$line.quantity"] } },
           },
         },
+        { $match: { units: { $gt: 0 } } },
         { $sort: { revenue: -1 } },
         { $limit: 6 },
       ]),
       Order.aggregate<{ _id: ProductType | null; revenue: number }>([
         ...deliveredBetween(from),
-        { $unwind: "$items" },
-        { $lookup: { from: "products", localField: "items.productId", foreignField: "_id", as: "product", pipeline: [{ $project: { productType: 1 } }] } },
+        ...NET_LINES,
+        { $lookup: { from: "products", localField: "line.productId", foreignField: "_id", as: "product", pipeline: [{ $project: { productType: 1 } }] } },
         {
           $group: {
             _id: { $ifNull: [{ $first: "$product.productType" }, "leather"] },
-            revenue: { $sum: { $multiply: ["$items.price", "$items.quantity"] } },
+            revenue: { $sum: { $multiply: ["$line.price", "$line.quantity"] } },
           },
         },
       ]),

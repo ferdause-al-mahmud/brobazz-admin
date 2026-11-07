@@ -209,10 +209,16 @@ export default async function OrdersPage({
                       <span className="block text-xs text-muted">
                         {formatDate(order.createdAt, true)}
                       </span>
-                      {order.source === "admin" && (
+                      {order.exchangeOf ? (
                         <Badge className="mt-1" tone="gold">
-                          Manual{order.channel ? ` · ${order.channel}` : ""}
+                          Exchange · #{order.exchangeOf}
                         </Badge>
+                      ) : (
+                        order.source === "admin" && (
+                          <Badge className="mt-1" tone="gold">
+                            Manual{order.channel ? ` · ${order.channel}` : ""}
+                          </Badge>
+                        )
                       )}
                     </Td>
                     <Td>
@@ -239,6 +245,11 @@ export default async function OrdersPage({
                     </Td>
                     <Td className="text-right font-semibold tabular-nums">
                       {formatTaka(order.total)}
+                      {(order.advancePaid ?? 0) > 0 && order.paymentStatus !== "paid" && (
+                        <span className="block text-xs font-normal text-muted">
+                          {formatTaka(order.advancePaid ?? 0)} advance
+                        </span>
+                      )}
                     </Td>
                     <Td>
                       <PaymentBadge status={order.paymentStatus} />

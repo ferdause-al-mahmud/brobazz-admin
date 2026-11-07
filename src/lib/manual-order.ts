@@ -18,7 +18,20 @@ export type ManualOrderInput = {
   discount: number;
   status: "pending" | "confirmed";
   paymentStatus: "unpaid" | "paid";
+  /** Received before delivery (cash-on-delivery orders only); the courier collects the rest. */
+  advance: number;
   channel: string;
+  adminNote: string;
+};
+
+/** What the "Create exchange" form sends to createExchangeOrder(). */
+export type ExchangeInput = {
+  /** Lines of the delivered order coming back: their index in its items, and how many. */
+  returns: { itemIndex: number; quantity: number }[];
+  /** What the customer gets instead. */
+  items: ManualOrderLine[];
+  shippingOption: string;
+  shippingCost: number;
   adminNote: string;
 };
 

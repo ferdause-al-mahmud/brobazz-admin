@@ -1,27 +1,17 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
-import { isValidObjectId } from "mongoose";
 import { revalidatePath } from "next/cache";
 import { requireStaff } from "@/lib/auth/session";
 import { getSettings } from "@/lib/data/settings";
 import { connectToDatabase } from "@/lib/db";
 import type { ManualOrderInput } from "@/lib/manual-order";
-import { Counter } from "@/lib/models/Counter";
 import { Order } from "@/lib/models/Order";
-import { Product } from "@/lib/models/Product";
 import { User } from "@/lib/models/User";
+import { allocateOrderID, buildOrderLines, lineErrors, toLocalPhone } from "@/lib/order-create";
 import { OutOfStockError, reserveStock } from "@/lib/order-stock";
 import { revalidateStorefront } from "@/lib/revalidate";
-import { variantLabel } from "@/lib/store-definitions";
 import { InputError, runAction } from "./result";
-
-// Same numbering as storefront orders (customer/lib/orders.ts): 10001, 10002, …
-const FIRST_ORDER_ID = 10000;
-
-function toLocalPhone(phone: string) {
-  return phone.replace(/\D/g, "").replace(/^880/, "0");
-}
 
 /** Details from this phone number's last order, to fill in the new-order form. */
 export async function findCustomerByPhone(phone: string) {
@@ -50,51 +40,28 @@ export async function findCustomerByPhone(phone: string) {
 export async function createManualOrder(input: ManualOrderInput) {
   return runAction(async () => {
     const user = await requireStaff();
-    const errors: Record<string, string> = {};
     const phone = toLocalPhone(input.customer.phone);
+    const errors: Record<string, string> = lineErrors(input.items);
     if (input.customer.name.trim().length < 2) errors.name = "Enter the customer's name";
     if (!/^01[3-9]\d{8}$/.test(phone)) errors.phone = "Enter an 11-digit number starting 013–019";
     if (input.customer.address.trim().length < 10) errors.address = "Enter the full delivery address";
-    if (!input.items.length) errors.items = "Add at least one product";
     if (!Number.isFinite(input.shippingCost) || input.shippingCost < 0) errors.shippingCost = "Enter 0 or more";
     if (!Number.isFinite(input.discount) || input.discount < 0) errors.discount = "Enter 0 or more";
-    input.items.forEach((item, index) => {
-      if (!Number.isInteger(item.quantity) || item.quantity < 1) errors[`items.${index}`] = "Quantity must be at least 1";
-      else if (!Number.isFinite(item.price) || item.price < 0) errors[`items.${index}`] = "Enter a price";
-    });
+    if (!Number.isFinite(input.advance) || input.advance < 0) errors.advance = "Enter 0 or more";
     if (Object.keys(errors).length) throw new InputError("Please fix the highlighted fields", errors);
 
     const { connection } = await connectToDatabase();
-    const products = new Map(
-      (await Product.find({ _id: { $in: input.items.map((item) => item.productId) } }).lean()).map((product) => [
-        product._id,
-        product,
-      ]),
-    );
-
-    const lines = input.items.map((item) => {
-      const product = products.get(item.productId);
-      if (!product) throw new InputError("A product in this order no longer exists");
-      const base = { productId: product._id, name: product.name, quantity: item.quantity, price: Math.round(item.price) };
-      if (!product.variants.length) return { ...base, options: [], image: product.images[0] };
-
-      const variant = item.variantId && isValidObjectId(item.variantId)
-        ? product.variants.find((entry) => String(entry._id) === item.variantId)
-        : undefined;
-      if (!variant) throw new InputError(`Choose a size or colour for ${product.name}`);
-      return {
-        ...base,
-        variantId: String(variant._id),
-        sku: variant.sku ?? undefined,
-        options: variant.options.map(({ name, value }) => ({ name, value })),
-        variantLabel: variantLabel(variant.options),
-        image: variant.image ?? product.images[0],
-      };
-    });
+    const lines = await buildOrderLines(input.items);
 
     const subtotal = lines.reduce((sum, line) => sum + line.price * line.quantity, 0);
     const discount = Math.min(Math.round(input.discount), subtotal);
     const shippingCost = Math.round(input.shippingCost);
+    const total = Math.max(0, subtotal - discount + shippingCost);
+    // Paid in full counts as an advance of the whole total, so the courier collects nothing.
+    const advancePaid = input.paymentStatus === "paid" ? total : Math.round(input.advance);
+    if (advancePaid > total) throw new InputError("The advance is more than the order total", { advance: `At most ${total}` });
+    const paymentStatus = advancePaid > 0 && advancePaid === total ? "paid" : "unpaid";
+
     const [settings, account] = await Promise.all([getSettings(), User.findOne({ phone }, { _id: 1 }).lean()]);
     const shipping = settings.shippingOptions.find((option) => option.value === input.shippingOption);
     const channel = input.channel.trim();
@@ -104,13 +71,7 @@ export async function createManualOrder(input: ManualOrderInput) {
     try {
       await connection.transaction(async (session) => {
         for (const line of lines) await reserveStock(line, session);
-        const counter = await Counter.findOneAndUpdate(
-          { _id: "orderID" },
-          { $inc: { seq: 1 } },
-          { upsert: true, returnDocument: "after", session },
-        );
-        if (!counter) throw new Error("Couldn't allocate an order number");
-        orderID = FIRST_ORDER_ID + counter.seq;
+        orderID = await allocateOrderID(session);
 
         await Order.create(
           [
@@ -132,12 +93,13 @@ export async function createManualOrder(input: ManualOrderInput) {
               subtotal,
               shippingCost,
               discount,
-              total: Math.max(0, subtotal - discount + shippingCost),
+              total,
+              advancePaid,
               source: "admin",
               channel: channel || undefined,
               createdBy: user.name,
               status: input.status,
-              paymentStatus: input.paymentStatus,
+              paymentStatus,
               adminNote: input.adminNote.trim() || undefined,
               statusHistory: [
                 { status: "pending", by: user.name, note: `Entered in the admin${channel ? ` · ${channel}` : ""}`, at: now },

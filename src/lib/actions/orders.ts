@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireStaff } from "@/lib/auth/session";
 import { connectToDatabase } from "@/lib/db";
 import { Order } from "@/lib/models/Order";
-import { restockItems } from "@/lib/order-stock";
+import { linesStillWithCustomer, receiveExchangedItems, restockItems } from "@/lib/order-stock";
 import { revalidateStorefront } from "@/lib/revalidate";
 import {
   ORDER_STATUSES,
@@ -24,8 +24,9 @@ function refresh(orderID: number) {
 /**
  * Moves an order to a new status and records it in the history. Cancelling or returning puts the
  * items back in stock the first time; such an order can't be reopened, because its stock is gone.
+ * Delivering an exchange takes back the customer's old items, into stock if `resellable`.
  */
-export async function updateOrderStatus(orderID: number, status: OrderStatus, note: string) {
+export async function updateOrderStatus(orderID: number, status: OrderStatus, note: string, options: { resellable?: boolean } = {}) {
   return runAction(async () => {
     const user = await requireStaff();
     if (!ORDER_STATUSES.includes(status)) throw new InputError("Unknown status");
@@ -41,8 +42,26 @@ export async function updateOrderStatus(orderID: number, status: OrderStatus, no
       }
 
       if (RESTOCKING_STATUSES.includes(status) && !order.restockedAt) {
-        await restockItems(order.items, session);
+        // Units already swapped through a delivered exchange came back then; don't count them twice.
+        const exchanges = await Order.find(
+          { orderID: { $ne: orderID }, exchangeOf: orderID },
+          { orderID: 1, status: 1, exchangeReturns: 1, exchangeReturnedAt: 1 },
+        )
+          .session(session)
+          .lean();
+        // An exchange still on its way would bring the same item back again when delivered.
+        const open = exchanges.find((exchange) => !exchange.exchangeReturnedAt && !RESTOCKING_STATUSES.includes(exchange.status));
+        if (open) throw new InputError(`Exchange #${open.orderID} for this order is still open. Cancel or deliver it first.`);
+        await restockItems(linesStillWithCustomer(order.items, exchanges), session);
         order.restockedAt = new Date();
+        restocked = true;
+      }
+
+      if (status === "delivered" && order.exchangeOf && order.exchangeReturns?.length && !order.exchangeReturnedAt) {
+        const resellable = options.resellable ?? true;
+        await receiveExchangedItems(order.exchangeReturns, resellable, session);
+        order.exchangeReturnedAt = new Date();
+        order.exchangeReturnResellable = resellable;
         restocked = true;
       }
 
@@ -70,6 +89,25 @@ export async function updatePaymentStatus(orderID: number, paymentStatus: Paymen
     await Order.updateOne({ orderID }, { $set: { paymentStatus } });
     refresh(orderID);
   }, "Payment updated");
+}
+
+/** Records money received before delivery; the courier then collects only the rest. */
+export async function updateAdvance(orderID: number, amount: number) {
+  return runAction(async () => {
+    await requireStaff();
+    if (!Number.isFinite(amount) || amount < 0) throw new InputError("Enter 0 or more");
+    await connectToDatabase();
+    const order = await Order.findOne({ orderID });
+    if (!order) throw new InputError("This order no longer exists");
+    if (["delivered", "cancelled", "returned"].includes(order.status)) throw new InputError(`This order is already ${order.status}`);
+    const advancePaid = Math.round(amount);
+    if (advancePaid > order.total) throw new InputError(`The advance can't be more than the total (${order.total})`);
+
+    order.advancePaid = advancePaid;
+    if (order.paymentStatus !== "refunded") order.paymentStatus = advancePaid === order.total && advancePaid > 0 ? "paid" : "unpaid";
+    await order.save();
+    refresh(orderID);
+  }, "Advance saved");
 }
 
 export async function updateCourier(orderID: number, courier: { name: string; trackingNumber: string; trackingUrl: string }) {

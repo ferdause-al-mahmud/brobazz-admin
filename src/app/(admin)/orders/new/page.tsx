@@ -4,36 +4,14 @@ import { PageHeader } from "@/components/ui/Page";
 import { requireStaffPage } from "@/lib/auth/session";
 import { getSettings } from "@/lib/data/settings";
 import { connectToDatabase } from "@/lib/db";
-import type { PickerProduct } from "@/lib/manual-order";
-import { Product, type ProductDocument } from "@/lib/models/Product";
-import { effectivePrice, variantLabel, variantPricing } from "@/lib/store-definitions";
+import { getPickerProducts } from "@/lib/order-create";
 
 export const metadata: Metadata = { title: "New order" };
 
 export default async function NewOrderPage() {
   await requireStaffPage();
   await connectToDatabase();
-  const [stored, settings] = await Promise.all([
-    Product.find({ isActive: true }).sort({ name: 1 }).lean<(ProductDocument & { _id: string })[]>(),
-    getSettings(),
-  ]);
-
-  const products: PickerProduct[] = stored.map((product) => ({
-    id: product._id,
-    name: product.name,
-    image: product.images[0] ?? null,
-    price: product.finalPrice ?? effectivePrice(product),
-    stock: product.stock,
-    variants: product.variants
-      .filter((variant) => variant.isActive)
-      .map((variant) => ({
-        id: String((variant as { _id?: unknown })._id),
-        label: variantLabel(variant.options),
-        price: effectivePrice(variantPricing(product, variant)),
-        stock: variant.stock,
-        image: variant.image ?? null,
-      })),
-  }));
+  const [products, settings] = await Promise.all([getPickerProducts(), getSettings()]);
 
   return (
     <>
